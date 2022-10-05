@@ -1,0 +1,117 @@
+Description: A Simple Template
+Parameters:
+  VpcCirdBlock:
+    Type: String
+    Default: 172.31.0.0/16
+    Description: Enter your CidrBlock
+  VpcTagKey:
+    Type: String
+    Default: Key
+    Description: Enter your Tag Key
+  VpcTagValue:
+    Type: String
+    Default: Value
+    Description: Enter your Tag Value
+  SubnetAZ:
+    Type: String
+    Default: "us-west-2a"
+  SubnetCirdBlock:
+    Type: String
+    Default: 172.31.0.0/20
+    Description: Enter your CidrBlock
+Resources:
+  Vpcaws:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 
+        Ref: VpcCirdBlock
+      EnableDnsHostnames: True
+      EnableDnsSupport: True
+      Tags:
+        - Key: 
+            Ref: VpcTagKey
+          Value: 
+            Ref: VpcTagValue 
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: 
+        Ref: Vpcaws
+      AvailabilityZone:
+        Ref: SubnetAZ
+      CidrBlock:
+        Ref: SubnetCirdBlock
+      MapPublicIpOnLaunch: True
+      Tags:
+      - Key: subnetkey
+        Value: subnetvalue
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: InternetGateway
+  GatewayToInternet:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: 
+        Ref: Vpcaws
+      InternetGatewayId:
+        Ref: InternetGateway
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpcaws
+      Tags:
+      - Key: Name
+        Value: Public
+  PublicRoute1:   # Public route table has direct routing to IGW:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayToInternet
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-08e2d37b6a0129927
+      AvailabilityZone:
+        Ref: SubnetAZ
+      InstanceType: t2.micro
+      KeyName: newkeypair
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: True
+          DeviceIndex: 0
+          GroupSet:
+            - Ref: SecurityGroup
+          SubnetId: 
+            Ref: PublicSubnet
+      UserData:
+        Fn::Base64: 
+          !Sub |
+            #!/bin/bash
+            yum update -y
+            yum -y install httpd
+            systemctl enable httpd
+            systemctl start httpd.service
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SecurityGroup
+      VpcId: 
+        Ref: Vpcaws
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: SName
+          Value: SecurityGroup
